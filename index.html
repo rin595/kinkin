@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stardew Logbook - 協作版日誌 (v3.1)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* Stardew 顏色設定 */
+            --stardew-green: #4c7c34;
+            --stardew-brown: #a0785a;
+            --stardew-light-brown: #cfc29c;
+            --stardew-cream: #fcfbe7;
+            --stardew-dark: #2a2a2a;
+            --stardew-red: #c94c4c;
+            --stardew-gold: #ffc300;
+            --stardew-blue: #5b7999; /* LL 的顏色 */
+            --stardew-pink: #cc99a3; /* KK 的顏色 */
+            --stardew-purple: #9a67a5; /* 總結的顏色 */
+            --pixel-size: 2px;
+            --page-width: 800px;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            image-rendering: pixelated;
+        }
+
+        body {
+            margin: 0; padding: 0;
+            background-color: var(--stardew-green);
+            background-image: repeating-linear-gradient(45deg, var(--stardew-green) 0, var(--stardew-green) 10px, var(--stardew-dark) 10px, var(--stardew-dark) 11px),
+                              repeating-linear-gradient(-45deg, var(--stardew-green) 0, var(--stardew-green) 10px, var(--stardew-dark) 10px, var(--stardew-dark) 11px);
+            background-size: 20px 20px;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Press Start 2P', cursive;
+            overflow: hidden;
+            color: var(--stardew-dark);
+        }
+
+        /* --- 書本容器 (Wrapper) --- */
+        .journal-window {
+            width: var(--page-width);
+            height: 90vh;
+            background-color: var(--stardew-cream);
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+
+            border: calc(var(--pixel-size) * 4) solid var(--stardew-brown);
+            box-shadow:
+                calc(var(--pixel-size) * 4) calc(var(--pixel-size) * 4) 0 0 var(--stardew-dark),
+                calc(var(--pixel-size) * 8) calc(var(--pixel-size) * 8) 0 0 var(--stardew-light-brown),
+                inset 0 0 0 2px var(--stardew-light-brown);
+        }
+
+        /* --- 視圖切換器 (用於動畫) --- */
+        #view-switcher {
+             position: relative;
+             height: calc(100% - 70px);
+             perspective: 1500px;
+        }
+
+        #view-switcher > div {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            padding: 20px;
+            background-color: var(--stardew-cream);
+            transition: transform 0.6s ease-in-out, opacity 0.6s ease-in-out;
+            transform-origin: left;
+            overflow-y: auto;
+            backface-visibility: hidden;
+        }
+
+        .view-hidden { opacity: 0; z-index: 10; pointer-events: none; transform: rotateY(-90deg); }
+        .view-active { opacity: 1; z-index: 20; pointer-events: all; transform: rotateY(0deg); }
+
+        /* --- 頂部狀態欄 --- */
+        .stat-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 10px 0; border-bottom: var(--pixel-size) solid var(--stardew-dark); }
+        .settings-btn { background-color: var(--stardew-light-brown); color: var(--stardew-dark); padding: 4px 8px; font-size: 10px; cursor: pointer; border: var(--pixel-size) solid var(--stardew-dark); box-shadow: 2px 2px 0 0 var(--stardew-dark); transition: all 0.1s; }
+        .settings-btn:hover { background-color: var(--stardew-gold); transform: translate(-1px, -1px); }
+
+        .love-value { font-size: 10px; background: var(--stardew-pink); padding: 4px 8px; color: #fff; border: var(--pixel-size) solid var(--stardew-dark); box-shadow: 2px 2px 0 0 var(--stardew-dark); }
+        .stat-item { display: flex; align-items: center; font-size: 10px; }
+        .stat-icon { font-size: 18px; margin-right: 5px; }
+
+        /* --- 日曆相關樣式 --- */
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; font-size: 10px; }
+        .day-header { text-align: center; color: var(--stardew-brown); padding: 5px; }
+        .day-cell { height: 80px; padding: 5px; text-align: right; cursor: pointer; position: relative; background-color: #fff; border: var(--pixel-size) solid var(--stardew-light-brown); box-shadow: 1px 1px 0 0 var(--stardew-light-brown); transition: background-color 0.1s, transform 0.1s; }
+        .day-cell:not(.empty-cell):hover { background-color: var(--stardew-gold); transform: translate(-1px, -1px); }
+        .empty-cell { background-color: #f0f0f0; cursor: default; border: none; box-shadow: none; }
+        .has-entry { background-color: var(--stardew-pink); color: #fff; font-weight: bold; }
+
+        /* 月末總結標記 */
+        .is-month-end { border: 4px dashed var(--stardew-purple); font-weight: bold; }
+        .is-month-end:hover { background-color: var(--stardew-purple) !important; color: #fff; }
+        .is-month-end .count { background: var(--stardew-gold) !important; color: var(--stardew-dark); }
+
+        .day-cell .count { position: absolute; top: 5px; left: 5px; font-size: 8px; background: rgba(0,0,0,0.2); padding: 1px 3px; border-radius: 2px; }
+
+        /* --- 單日頁面 --- */
+        .timeline-content { display: flex; flex-direction: column; gap: 20px; padding-top: 20px; }
+
+        /* --- 聊天氣泡樣式 --- */
+        .memory-entry { width: 70%; padding: 15px; margin-bottom: 10px; transition: all 0.3s; position: relative; border: var(--pixel-size) solid var(--stardew-dark); box-shadow: var(--pixel-size) var(--pixel-size) 0 0 var(--stardew-dark); }
+        .author-LL { margin-right: auto; background-color: var(--stardew-blue); color: #fff; }
+        .author-KK { margin-left: auto; background-color: var(--stardew-pink); color: var(--stardew-dark); }
+
+        /* --- 月末總結內容顯示 --- */
+        .entry-month-summary {
+            width: 90%;
+            margin: 20px auto;
+            padding: 25px;
+            background-color: var(--stardew-purple);
+            color: #fff;
+            border: 4px solid var(--stardew-dark);
+            box-shadow: 6px 6px 0 0 var(--stardew-dark);
+        }
+        .summary-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .summary-header h3 { font-size: 14px; text-align: center; margin: 0; flex-grow: 1; }
+
+        .summary-content-wrapper { display: flex; gap: 20px; }
+        .summary-section-column { flex: 1; display: flex; flex-direction: column; }
+        .summary-section { margin-bottom: 10px; padding-bottom: 5px; border-bottom: 1px dashed rgba(255, 255, 255, 0.3); }
+        .summary-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .summary-section h4 { font-size: 9px; margin-bottom: 3px; color: var(--stardew-gold); }
+        .summary-section p { font-size: 8px; line-height: 1.4; margin: 0; color: var(--stardew-cream); word-break: break-word; }
+
+        /* --- Modal & Form Styles --- */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); display: none; justify-content: center; align-items: center; z-index: 100; }
+        .crafting-menu { width: 500px; background-color: var(--stardew-cream); padding: 30px; border: calc(var(--pixel-size) * 4) solid var(--stardew-brown); box-shadow: calc(var(--pixel-size) * 4) calc(var(--pixel-size) * 4) 0 0 var(--stardew-dark), calc(var(--pixel-size) * 8) calc(var(--pixel-size) * 8) 0 0 var(--stardew-light-brown); }
+        .form-row { display: flex; gap: 10px; margin-bottom: 15px; }
+        .form-group { flex-grow: 1; display: flex; flex-direction: column; }
+        .form-group label { font-size: 8px; margin-bottom: 5px; color: var(--stardew-brown); }
+        .form-group input, .form-group select, .form-group textarea { padding: 5px; font-family: sans-serif; font-size: 12px; border: var(--pixel-size) solid var(--stardew-dark); }
+        .form-group textarea { resize: vertical; min-height: 100px; }
+
+        /* 月末總結表單特化 (核心調整) */
+        #summary-modal .crafting-menu { width: 700px; } /* 加寬 Modal */
+        #summary-form .form-group { margin-bottom: 10px; }
+        #summary-form textarea { min-height: 60px; font-size: 11px; font-family: sans-serif; }
+
+        .summary-form-section-wrapper { display: flex; gap: 15px; margin-bottom: 20px; } /* 讓兩部分並排 */
+        .summary-author-form-section {
+            flex: 1;
+            padding: 15px;
+            border: var(--pixel-size) solid var(--stardew-dark);
+            position: relative;
+            background-color: #fff;
+        }
+        .summary-author-form-section h4 {
+            font-size: 10px;
+            text-align: center;
+            background: var(--stardew-cream);
+            padding: 5px;
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: fit-content;
+            border: var(--pixel-size) solid var(--stardew-dark);
+            box-shadow: 2px 2px 0 0 var(--stardew-dark);
+        }
+        .summary-author-form-section.ll-section h4 { color: var(--stardew-blue); }
+        .summary-author-form-section.kk-section h4 { color: var(--stardew-pink); }
+
+        /* --- 統一的像素風格按鈕 (btn-pixel) --- */
+        .btn-pixel {
+            background-color: var(--stardew-light-brown);
+            color: var(--stardew-dark);
+            padding: 8px 12px;
+            font-size: 10px;
+            cursor: pointer;
+            border: var(--pixel-size) solid var(--stardew-dark);
+            box-shadow: 2px 2px 0 0 var(--stardew-dark);
+            transition: all 0.1s;
+            line-height: 1;
+            font-family: 'Press Start 2P', cursive;
+        }
+        .btn-pixel:hover { background-color: var(--stardew-gold); color: var(--stardew-dark); box-shadow: 3px 3px 0 0 var(--stardew-dark); transform: translate(-1px, -1px); }
+        .btn-pixel:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 0 var(--stardew-dark); }
+
+        .add-btn { position: fixed; bottom: 30px; right: 30px; width: 120px; height: 40px; line-height: 20px; text-align: center; background-color: var(--stardew-gold); color: var(--stardew-dark); cursor: pointer; z-index: 50; }
+
+        .file-upload-btn { background-color: var(--stardew-blue); color: #fff; padding: 8px 12px; font-size: 10px; cursor: pointer; border: var(--pixel-size) solid var(--stardew-dark); box-shadow: 2px 2px 0 0 var(--stardew-dark); display: inline-block; margin-top: 5px; }
+        .file-upload-btn:hover { background-color: #4a6785; }
+        #entry-image { display: none; }
+
+        /* 返回按鈕的統一風格 */
+        .back-btn {
+            position: absolute; top: 5px; left: 25px;
+            z-index: 30;
+            background-color: var(--stardew-light-brown);
+            color: var(--stardew-dark);
+            padding: 5px 8px;
+            font-size: 10px;
+            cursor: pointer;
+            border: var(--pixel-size) solid var(--stardew-dark);
+            box-shadow: 2px 2px 0 0 var(--stardew-dark);
+            transition: all 0.1s;
+            line-height: 1;
+        }
+        .back-btn:hover { background-color: var(--stardew-gold); transform: translate(-1px, -1px); }
+        .back-btn:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 0 var(--stardew-dark); }
+
+        /* 刪除按鈕的統一風格 */
+        .delete-btn {
+            background-color: var(--stardew-red);
+            color: #fff;
+            font-size: 8px;
+            padding: 2px 5px;
+            margin-left: 10px;
+            border: var(--pixel-size) solid var(--stardew-dark);
+            cursor: pointer;
+            box-shadow: 1px 1px 0 0 var(--stardew-dark);
+            transition: background-color 0.1s;
+            line-height: 1;
+        }
+        .delete-btn:hover { background-color: darkred; box-shadow: 2px 2px 0 0 var(--stardew-dark); }
+        .delete-btn:active { transform: translate(1px, 1px); box-shadow: 0 0 0 0 var(--stardew-dark); }
+
+    </style>
+</head>
+<body>
+
+    <div class="journal-window">
+
+        <div class="stat-bar">
+             <button class="settings-btn btn-pixel" onclick="openSettingsModal()">⚙️ SETTINGS</button>
+            <div class="love-value" id="love-value">
+                ❤️ LOVE: 0
+            </div>
+            <div class="stat-item">
+                <span class="stat-icon">📅</span>
+                <span style="font-size: 8px;" id="current-date"></span>
+            </div>
+        </div>
+
+        <div id="view-switcher">
+
+            <div id="calendar-view" class="view-active">
+                <header style="text-align: center; margin-bottom: 30px;">
+                    <h1 style="font-size: 20px; margin: 0; color: var(--stardew-dark);">CALENDAR</h1>
+                    <div id="current-month-year"></div>
+                </header>
+                <div class="calendar-grid" id="calendar-grid">
+                    </div>
+            </div>
+
+            <div id="day-view" class="view-hidden">
+                <button class="back-btn" onclick="navigateTo('calendar')">← BACK</button>
+                <h2 id="day-title" style="font-size: 16px; text-align: center; margin-bottom: 20px;"></h2>
+                <div class="timeline-content" id="day-timeline-content">
+                    </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <button class="add-btn btn-pixel" onclick="openForm()">+ NEW LOG</button>
+
+    <!-- 普通日誌表單 Modal -->
+    <div class="modal-overlay" id="crafting-modal">
+        <div class="crafting-menu">
+            <h2>CRAFT NEW ENTRY</h2>
+            <form id="entry-form">
+
+                <div class="form-row">
+                    <div class="form-group"><label for="entry-author">RECORDER (記事人)</label><select id="entry-author" required><option value="LL">LL</option><option value="KK">KK</option></select></div>
+                    <div class="form-group"><label for="entry-date">DATE (日期)</label><input type="date" id="entry-date" required></div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group"><label for="entry-weather">WEATHER (天氣)</label>
+                        <select id="entry-weather" required>
+                            <option value="☀️">晴天 (Sunny) ☀️</option>
+                            <option value="☁️">多雲 (Cloudy) ☁️</option>
+                            <option value="💨">颳風 (Windy) 💨</option>
+                            <option value="🌧️">下雨 (Rainy) 🌧️</option>
+                            <option value="❄️">下雪 (Snowy) ❄️</option>
+                        </select>
+                    </div>
+                    <div class="form-group"><label for="entry-mood">MOOD (心情)</label>
+                        <select id="entry-mood" required>
+                            <option value="😄">開心 (Happy)</option>
+                            <option value="🙂">平靜 (Calm)</option>
+                            <option value="😥">難過 (Sad)</option>
+                            <option value="😡">生氣 (Angry)</option>
+                            <option value="😴">疲憊 (Tired)</option>
+                            <option value="✨">興奮 (Excited)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group" style="flex-grow: 2;"><label for="entry-title">TITLE / SHORT CAPTION (標題)</label><input type="text" id="entry-title" required maxlength="50"></div>
+                    <div class="form-group"><label for="entry-type">ENTRY TYPE (形式)</label>
+                        <select id="entry-type" required onchange="toggleContentRequired()">
+                            <option value="text">TEXT LOG (文字)</option>
+                            <option value="photo">PHOTO MEMORY (圖片)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group" id="content-text-group">
+                    <label for="entry-content">MAIN CONTENT (主要內容)</label>
+                    <textarea id="entry-content" required></textarea>
+                </div>
+
+                <div class="form-group" id="file-upload-group">
+                    <label for="entry-image">ATTACH PHOTO (圖片檔案)</label>
+                    <label for="entry-image" class="file-upload-btn" id="file-label" style="width: 100%; text-align: center;">CLICK TO SELECT FILE 📷</label>
+                    <input type="file" id="entry-image" accept="image/*">
+                </div>
+
+                <div class="form-actions" style="display:flex; justify-content: space-between; margin-top: 20px;">
+                    <button type="button" class="btn-pixel" onclick="closeForm()">CLOSE</button>
+                    <button type="submit" class="btn-pixel" style="background-color: var(--stardew-green); color:#fff;">LOG IT!</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 設定 Modal -->
+    <div class="modal-overlay" id="settings-modal">
+        <div class="crafting-menu" style="width: 450px;">
+            <h2>SETTINGS / DATA TRANSFER</h2>
+             <div class="setting-option">
+                <h3>EXPORT LOGS (匯出日誌)</h3>
+                <p style="font-size: 10px; margin-bottom: 10px; line-height: 1.4;">將所有日誌內容打包成一個 `.json` 檔案。這是您與協作者共享進度的方式。</p>
+                <button class="btn-pixel" style="background-color: var(--stardew-gold); color: var(--stardew-dark);" onclick="exportLogs()">DOWNLOAD .JSON</button>
+            </div>
+
+            <div class="setting-option" style="margin-top: 20px;">
+                <h3>IMPORT LOGS (匯入日誌)</h3>
+                <p style="font-size: 10px; margin-bottom: 10px; line-height: 1.4;">上傳一個 `.json` 檔案來覆蓋本地儲存的日誌。**警告：這將取代您所有的本地紀錄！**</p>
+                <input type="file" id="import-file-input" accept=".json" style="display: none;">
+                <label for="import-file-input" class="file-upload-btn">
+                    UPLOAD & IMPORT FILE
+                </label>
+            </div>
+
+            <div class="setting-option" style="margin-top: 20px;">
+                <h3>WIPE ALL DATA (清除數據)</h3>
+                <p style="font-size: 10px; margin-bottom: 10px; line-height: 1.4;">如果您想從頭開始或清理本地儲存，請點擊此處。**此操作不可逆！**</p>
+                <button type="button" class="btn-pixel" style="background-color: var(--stardew-red); color: #fff;" onclick="wipeData()">WIPE LOCAL DATA</button>
+            </div>
+
+            <div class="form-actions" style="display:flex; justify-content: end; margin-top: 20px;">
+                <button type="button" class="btn-pixel" onclick="closeSettingsModal()">CLOSE</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 月末總結 Modal -->
+    <div class="modal-overlay" id="summary-modal">
+        <div class="crafting-menu" style="width: 700px;">
+            <h2 id="summary-month-title" style="text-align: center;"></h2>
+            <form id="summary-form">
+
+                <div class="summary-form-section-wrapper">
+                    <div class="summary-author-form-section ll-section">
+                        <h4>LL'S SECTION</h4>
+                        <div class="form-group"><label>本月復盤 (LL)</label><textarea id="summary-ll-review" required></textarea></div>
+                        <div class="form-group"><label>待改進 (LL)</label><textarea id="summary-ll-improve" required></textarea></div>
+                        <div class="form-group"><label>對 KK 的期待 (LL)</label><textarea id="summary-ll-expect" required></textarea></div>
+                    </div>
+
+                    <div class="summary-author-form-section kk-section">
+                        <h4>KK'S SECTION</h4>
+                        <div class="form-group"><label>本月復盤 (KK)</label><textarea id="summary-kk-review" required></textarea></div>
+                        <div class="form-group"><label>待改進 (KK)</label><textarea id="summary-kk-improve" required></textarea></div>
+                        <div class="form-group"><label>對 LL 的期待 (KK)</label><textarea id="summary-kk-expect" required></textarea></div>
+                    </div>
+                </div>
+
+                <div class="form-actions" style="display:flex; justify-content: space-between; margin-top: 20px;">
+                    <button type="button" class="btn-pixel" onclick="closeSummaryModal()">CLOSE</button>
+                    <button type="submit" class="btn-pixel" style="background-color: var(--stardew-purple); color:#fff;">SUBMIT SUMMARY</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+    <script>
+        // --- Setup & Global Variables ---
+        const MODAL = document.getElementById('crafting-modal');
+        const SETTINGS_MODAL = document.getElementById('settings-modal');
+        const SUMMARY_MODAL = document.getElementById('summary-modal');
+        const FORM = document.getElementById('entry-form');
+        const SUMMARY_FORM = document.getElementById('summary-form');
+        const CALENDAR_GRID = document.getElementById('calendar-grid');
+        const DAY_TIMELINE = document.getElementById('day-timeline-content');
+        const CALENDAR_VIEW = document.getElementById('calendar-view');
+        const DAY_VIEW = document.getElementById('day-view');
+
+        const FILE_INPUT = document.getElementById('entry-image');
+        const FILE_LABEL = document.getElementById('file-label');
+        const IMPORT_FILE_INPUT = document.getElementById('import-file-input');
+
+        const ENTRY_TYPE_SELECT = document.getElementById('entry-type');
+        const CONTENT_TEXTAREA = document.getElementById('entry-content');
+        const CONTENT_TEXT_GROUP = document.getElementById('content-text-group');
+
+        const STORAGE_KEY = 'stardewFarmLogEntriesV3';
+        const SUMMARY_TYPE = 'month_summary';
+        let allEntries = [];
+        const LOVE_VALUE_PER_ENTRY = 5;
+
+        let currentDisplayYear;
+        let currentDisplayMonth;
+        let currentSummaryDateStr = null;
+
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const today = new Date();
+            currentDisplayYear = today.getFullYear();
+            currentDisplayMonth = today.getMonth();
+
+            document.getElementById('current-date').textContent = getFormattedDate(today, 'YYYY/MM/DD');
+            loadAndRenderAll();
+            navigateTo('calendar');
+
+            IMPORT_FILE_INPUT.addEventListener('change', importLogs);
+
+            FORM.addEventListener('submit', handleEntrySubmit);
+            SUMMARY_FORM.addEventListener('submit', handleSummarySubmit);
+        });
+
+        function loadAndRenderAll() {
+            // 從 localStorage 加載日誌
+            allEntries = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+            calculateLoveValue();
+            renderCalendar();
+        }
+
+        function calculateLoveValue() {
+            // 計算愛心值：每月總結不計入，只計入普通日誌
+            const logEntries = allEntries.filter(e => e.type !== SUMMARY_TYPE);
+            const totalLove = logEntries.length * LOVE_VALUE_PER_ENTRY;
+            document.getElementById('love-value').textContent = `❤️ LOVE: ${totalLove}`;
+        }
+
+        // --- 視圖切換與導航 ---
+        function navigateTo(view, dateStr = null) {
+            if (view === 'day' && dateStr) {
+                renderDayView(dateStr);
+                CALENDAR_VIEW.classList.remove('view-active');
+                CALENDAR_VIEW.classList.add('view-hidden');
+                DAY_VIEW.classList.remove('view-hidden');
+                DAY_VIEW.classList.add('view-active');
+
+            } else if (view === 'calendar') {
+                const today = new Date();
+                document.getElementById('current-date').textContent = getFormattedDate(today, 'YYYY/MM/DD');
+
+                // 只有在回到日曆時才重置到當前月份
+                // 註釋掉這行以保持用戶導航的月份
+                // currentDisplayYear = today.getFullYear();
+                // currentDisplayMonth = today.getMonth();
+                renderCalendar();
+
+                DAY_VIEW.classList.remove('view-active');
+                DAY_VIEW.classList.add('view-hidden');
+                CALENDAR_VIEW.classList.remove('view-hidden');
+                CALENDAR_VIEW.classList.add('view-active');
+            }
+        }
+
+        function prevMonth() { currentDisplayMonth--; if (currentDisplayMonth < 0) { currentDisplayMonth = 11; currentDisplayYear--; } renderCalendar(); }
+        function nextMonth() { currentDisplayMonth++; if (currentDisplayMonth > 11) { currentDisplayMonth = 0; currentDisplayYear++; } renderCalendar(); }
+        window.prevMonth = prevMonth;
+        window.nextMonth = nextMonth;
+
+        // --- 日曆渲染 ---
+        function renderCalendar() {
+            const year = currentDisplayYear;
+            const month = currentDisplayMonth;
+
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const lastDayDateKey = getFormattedDate(new Date(year, month, daysInMonth), 'YYYY-MM-DD');
+
+            const entriesByDate = allEntries.reduce((acc, entry) => {
+                const dateKey = entry.dateStr;
+                if (!acc[dateKey]) acc[dateKey] = { logs: 0, summary: false };
+                if (entry.type === SUMMARY_TYPE) {
+                    acc[dateKey].summary = true;
+                } else {
+                    acc[dateKey].logs++;
+                }
+                return acc;
+            }, {});
+
+            document.getElementById('current-month-year').innerHTML = `
+                <button class="btn-pixel" style="padding: 4px 8px; font-size: 8px; margin-right: 15px;" onclick="prevMonth()">←</button>
+                <span style="font-size: 14px; color: var(--stardew-brown);">${year} / ${month + 1}</span>
+                <button class="btn-pixel" style="padding: 4px 8px; font-size: 8px; margin-left: 15px;" onclick="nextMonth()">→</button>
+            `;
+
+            CALENDAR_GRID.innerHTML = '';
+
+            // 調整日曆的第一天為周日 (getDay() 返回 0-6，0=周日)
+            const firstDayOfWeek = new Date(year, month, 1).getDay();
+            const dayNames = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
+            dayNames.forEach(day => { const header = document.createElement('div'); header.className = 'day-header'; header.textContent = day; CALENDAR_GRID.appendChild(header); });
+            for (let i = 0; i < firstDayOfWeek; i++) { const empty = document.createElement('div'); empty.className = 'empty-cell'; CALENDAR_GRID.appendChild(empty); }
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const date = new Date(year, month, day);
+                const dateKey = getFormattedDate(date, 'YYYY-MM-DD');
+                const cell = document.createElement('div');
+                cell.className = 'day-cell';
+                cell.textContent = day;
+                cell.dataset.date = dateKey;
+
+                const dayData = entriesByDate[dateKey] || { logs: 0, summary: false };
+
+                if (dayData.logs > 0 || dayData.summary) {
+                    cell.classList.add('has-entry');
+                    const countSpan = document.createElement('span');
+                    const totalCount = dayData.logs + (dayData.summary ? 1 : 0);
+                    countSpan.className = 'count';
+                    countSpan.textContent = `${totalCount} Log${totalCount > 1 ? 's' : ''}`;
+                    cell.appendChild(countSpan);
+                }
+
+                // 判斷是否為月末總結日
+                if (dateKey === lastDayDateKey) {
+                    cell.classList.add('is-month-end');
+                    // 月末總結日，點擊後導航到日誌頁面 (無論是否已創建總結)
+                    cell.onclick = (function(key) {
+                        return function() {
+                            navigateTo('day', key);
+                        };
+                    })(dateKey);
+
+                } else {
+                    // 普通日期，點擊後導航到日誌頁面
+                    cell.onclick = (function(key) { return function() { navigateTo('day', key); }; })(dateKey);
+                }
+
+                CALENDAR_GRID.appendChild(cell);
+            }
+        }
+
+        // --- 單日內容渲染 ---
+        function renderDayView(dateStr) {
+            document.getElementById('day-title').textContent = `LOGS FOR ${dateStr}`;
+            DAY_TIMELINE.innerHTML = '';
+            const dateObj = new Date(dateStr + 'T00:00:00');
+            document.getElementById('current-date').textContent = getFormattedDate(dateObj, 'YYYY/MM/DD');
+
+            const dayEntries = allEntries.filter(e => e.dateStr === dateStr)
+                                       .sort((a, b) => b.id - a.id); // 反向排序，最新的在上面
+
+            if (dayEntries.length === 0) {
+                DAY_TIMELINE.innerHTML = '<p style="text-align:center; font-size:10px; padding-top: 50px; color: var(--stardew-brown);">NO ENTRIES FOR THIS DATE. BE THE FIRST TO LOG!</p>';
+
+                // 如果是月末日，提供快捷入口創建總結
+                const daysInMonth = new Date(dateObj.getFullYear(), dateObj.getMonth() + 1, 0).getDate();
+                if (dateObj.getDate() === daysInMonth) {
+                    const quickSummaryBtn = document.createElement('button');
+                    quickSummaryBtn.className = 'btn-pixel';
+                    quickSummaryBtn.style = 'background-color: var(--stardew-purple); color: #fff; margin: 20px auto; display: block;';
+                    quickSummaryBtn.textContent = 'CREATE MONTHLY SUMMARY';
+                    quickSummaryBtn.onclick = () => openSummaryModal(dateStr);
+                    DAY_TIMELINE.appendChild(quickSummaryBtn);
+                }
+
+                return;
+            }
+
+            // 如果是月末日，且沒有總結，提供創建總結的按鈕
+            const daysInMonth = new Date(dateObj.getFullYear(), dateObj.getMonth() + 1, 0).getDate();
+            const hasSummary = dayEntries.some(e => e.type === SUMMARY_TYPE);
+            if (dateObj.getDate() === daysInMonth && !hasSummary) {
+                const quickSummaryBtn = document.createElement('button');
+                quickSummaryBtn.className = 'btn-pixel';
+                quickSummaryBtn.style = 'background-color: var(--stardew-purple); color: #fff; margin: 20px auto 40px auto; display: block;';
+                quickSummaryBtn.textContent = 'CREATE MONTHLY SUMMARY';
+                quickSummaryBtn.onclick = () => openSummaryModal(dateStr);
+                DAY_TIMELINE.appendChild(quickSummaryBtn);
+            }
+
+            // 渲染日誌條目
+            dayEntries.forEach(entry => {
+                DAY_TIMELINE.appendChild(createEntryElement(entry));
+            });
+
+            // 如果是月末日，且有總結，提供編輯總結的按鈕
+            if (dateObj.getDate() === daysInMonth && hasSummary) {
+                const editSummaryBtn = document.createElement('button');
+                editSummaryBtn.className = 'btn-pixel';
+                editSummaryBtn.style = 'background-color: var(--stardew-purple); color: #fff; margin: 20px auto 40px auto; display: block;';
+                editSummaryBtn.textContent = 'EDIT MONTHLY SUMMARY';
+                editSummaryBtn.onclick = () => openSummaryModal(dateStr);
+                DAY_TIMELINE.appendChild(editSummaryBtn);
+            }
+        }
+
+        // --- 刪除功能 ---
+        function deleteEntry(id, dateStr) {
+            // 使用自定義的模態或確認對話框來替代 alert/confirm
+            if (!window.confirm("確定要刪除這條日誌嗎？此操作無法撤銷。")) { return; }
+            allEntries = allEntries.filter(entry => entry.id !== id);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(allEntries));
+            calculateLoveValue();
+
+            // 判斷當前是否還在日誌頁面，是則刷新
+            if (DAY_VIEW.classList.contains('view-active')) {
+                renderDayView(dateStr);
+            }
+            renderCalendar();
+        }
+        window.deleteEntry = deleteEntry;
+
+
+        // --- 表單邏輯：普通日誌 ---
+
+        function toggleContentRequired() {
+            if (ENTRY_TYPE_SELECT.value === 'photo') {
+                CONTENT_TEXTAREA.removeAttribute('required');
+                CONTENT_TEXT_GROUP.style.opacity = '0.5';
+                CONTENT_TEXT_GROUP.style.pointerEvents = 'none';
+                FILE_INPUT.setAttribute('required', 'required');
+            } else {
+                CONTENT_TEXTAREA.setAttribute('required', 'required');
+                CONTENT_TEXT_GROUP.style.opacity = '1';
+                CONTENT_TEXT_GROUP.style.pointerEvents = 'all';
+                FILE_INPUT.removeAttribute('required');
+            }
+        }
+
+        function openForm() {
+            MODAL.style.display = 'flex';
+            FORM.reset();
+            FILE_LABEL.textContent = 'CLICK TO SELECT FILE 📷';
+            // 設置預設日期為當前選擇的日曆月份中的當前日期
+            const today = new Date();
+            const defaultDate = new Date(currentDisplayYear, currentDisplayMonth, today.getDate());
+            document.getElementById('entry-date').value = getFormattedDate(defaultDate, 'YYYY-MM-DD');
+            toggleContentRequired();
+        }
+        function closeForm() { MODAL.style.display = 'none'; }
+
+        FILE_INPUT.addEventListener('change', (e) => {
+            FILE_LABEL.textContent = e.target.files.length > 0 ? `File Selected: ${e.target.files[0].name}` : 'CLICK TO SELECT FILE 📷';
+        });
+
+        async function handleEntrySubmit(e) {
+            e.preventDefault();
+
+            const dateInput = document.getElementById('entry-date').value;
+            const entryType = ENTRY_TYPE_SELECT.value;
+            const file = FILE_INPUT.files[0];
+            let imageDataURL = null;
+
+            if (entryType === 'photo' && !file && FILE_INPUT.hasAttribute('required')) {
+                window.alert("圖片模式需要上傳圖片檔案。"); // 使用 window.alert 替代 confirm
+                return;
+            }
+
+            if (file) {
+                // 限制圖片大小避免 localStorage 爆炸
+                if (file.size > 2 * 1024 * 1024) { // 2MB
+                    window.alert("圖片檔案過大 (限制 2MB)，請壓縮後再上傳。");
+                    return;
+                }
+                imageDataURL = await fileToBase64(file);
+            }
+
+            const newEntry = {
+                id: Date.now(),
+                author: document.getElementById('entry-author').value,
+                dateStr: dateInput,
+                date: getFormattedDate(new Date(dateInput), 'YYYY/MM/DD'),
+                weather: document.getElementById('entry-weather').value,
+                mood: document.getElementById('entry-mood').value,
+                title: document.getElementById('entry-title').value,
+                content: document.getElementById('entry-content').value,
+                type: entryType,
+                imageDataURL: imageDataURL,
+            };
+
+            saveEntry(newEntry);
+            loadAndRenderAll();
+            navigateTo('day', newEntry.dateStr);
+            closeForm();
+        }
+
+        function saveEntry(newEntry) {
+            allEntries.push(newEntry);
+            // 重新排序以便管理 (雖然渲染時會再次排序)
+            allEntries.sort((a, b) => a.dateStr.localeCompare(b.dateStr) || a.id - b.id);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(allEntries));
+        }
+
+
+        // --- 表單邏輯：月末總結 ---
+
+        function openSummaryModal(dateStr) {
+            const dateObj = new Date(dateStr + 'T00:00:00');
+            const month = dateObj.getMonth() + 1;
+            const year = dateObj.getFullYear();
+
+            currentSummaryDateStr = dateStr; // Store for submission
+
+            document.getElementById('summary-month-title').textContent = `${year} / ${month} MONTHLY REVIEW`;
+
+            // Check if summary already exists for pre-filling
+            const existingSummary = allEntries.find(e => e.dateStr === dateStr && e.type === SUMMARY_TYPE);
+
+            if (existingSummary) {
+                document.getElementById('summary-ll-review').value = existingSummary.ll.review || '';
+                document.getElementById('summary-ll-improve').value = existingSummary.ll.improve || '';
+                document.getElementById('summary-ll-expect').value = existingSummary.ll.expect || '';
+
+                document.getElementById('summary-kk-review').value = existingSummary.kk.review || '';
+                document.getElementById('summary-kk-improve').value = existingSummary.kk.improve || '';
+                document.getElementById('summary-kk-expect').value = existingSummary.kk.expect || '';
+            } else {
+                SUMMARY_FORM.reset();
+            }
+
+            SUMMARY_MODAL.style.display = 'flex';
+        }
+        window.openSummaryModal = openSummaryModal;
+
+        function closeSummaryModal() {
+            SUMMARY_MODAL.style.display = 'none';
+            currentSummaryDateStr = null;
+        }
+        window.closeSummaryModal = closeSummaryModal;
+
+        function handleSummarySubmit(e) {
+            e.preventDefault();
+
+            if (!currentSummaryDateStr) {
+                window.alert("錯誤：無法確定總結日期。");
+                return;
+            }
+
+            // 1. 收集數據
+            const llData = {
+                review: document.getElementById('summary-ll-review').value,
+                improve: document.getElementById('summary-ll-improve').value,
+                expect: document.getElementById('summary-ll-expect').value,
+            };
+            const kkData = {
+                review: document.getElementById('summary-kk-review').value,
+                improve: document.getElementById('summary-kk-improve').value,
+                expect: document.getElementById('summary-kk-expect').value,
+            };
+
+            const dateObj = new Date(currentSummaryDateStr + 'T00:00:00');
+
+            const newSummaryEntry = {
+                id: Date.now(),
+                dateStr: currentSummaryDateStr,
+                date: getFormattedDate(dateObj, 'YYYY/MM/DD'),
+                type: SUMMARY_TYPE,
+                ll: llData,
+                kk: kkData,
+            };
+
+            // 2. 移除舊總結 (如果有)
+            allEntries = allEntries.filter(e => e.dateStr !== currentSummaryDateStr || e.type !== SUMMARY_TYPE);
+
+            // 3. 儲存新總結
+            saveEntry(newSummaryEntry); // saveEntry function handles push and storage
+            loadAndRenderAll();
+            closeSummaryModal();
+            navigateTo('day', newSummaryEntry.dateStr);
+        }
+
+        // --- Utility Functions ---
+
+        /** 格式化日期 */
+        function getFormattedDate(date, format) {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return format.replace('YYYY', y).replace('MM', m).replace('DD', d);
+        }
+
+        /** 檔案轉 Base64 */
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+                reader.readAsDataURL(file);
+            });
+        }
+
+        /** 創建日誌條目 (普通日誌/圖片日誌/總結) 的 DOM 元素 */
+        function createEntryElement(entry) {
+            const entryDiv = document.createElement('div');
+            entryDiv.className = `memory-entry author-${entry.author}`;
+            entryDiv.dataset.id = entry.id;
+
+            if (entry.type === SUMMARY_TYPE) {
+                // 月末總結渲染
+                entryDiv.classList.remove('author-LL', 'author-KK', 'memory-entry'); // 移除普通日誌樣式
+                entryDiv.style.width = '100%';
+                entryDiv.style.margin = '0';
+                entryDiv.classList.add('entry-month-summary');
+                entryDiv.innerHTML = `
+                    <div class="summary-header">
+                        <span style="font-size: 8px;">Month End Log</span>
+                        <h3>${entry.dateStr.substring(0, 7)} 月總結 (MONTHLY REVIEW)</h3>
+                        <button class="delete-btn" onclick="deleteEntry(${entry.id}, '${entry.dateStr}')">DELETE</button>
+                    </div>
+                    <div class="summary-content-wrapper">
+                        <div class="summary-section-column">
+                            <h4 style="color: ${getComputedStyle(document.documentElement).getPropertyValue('--stardew-blue')}">LL's Perspective</h4>
+                            <div class="summary-section">
+                                <h4>本月復盤:</h4><p>${entry.ll.review || 'N/A'}</p>
+                            </div>
+                            <div class="summary-section">
+                                <h4>待改進:</h4><p>${entry.ll.improve || 'N/A'}</p>
+                            </div>
+                            <div class="summary-section">
+                                <h4>對 KK 的期待:</h4><p>${entry.ll.expect || 'N/A'}</p>
+                            </div>
+                        </div>
+
+                        <div class="summary-section-column">
+                            <h4 style="color: ${getComputedStyle(document.documentElement).getPropertyValue('--stardew-pink')}">KK's Perspective</h4>
+                            <div class="summary-section">
+                                <h4>本月復盤:</h4><p>${entry.kk.review || 'N/A'}</p>
+                            </div>
+                            <div class="summary-section">
+                                <h4>待改進:</h4><p>${entry.kk.improve || 'N/A'}</p>
+                            </div>
+                            <div class="summary-section">
+                                <h4>對 LL 的期待:</h4><p>${entry.kk.expect || 'N/A'}</p>
+                            </div>
+                        </div>
+                    </div>
+                    <p style="text-align: right; font-size: 7px; margin-top: 15px;">Logged on: ${entry.date}</p>
+                `;
+                return entryDiv;
+            }
+
+            // 普通日誌渲染
+            entryDiv.innerHTML = `
+                <div style="font-size: 10px; font-weight: bold; margin-bottom: 5px; display: flex; justify-content: space-between;">
+                    <span>[${entry.author}] ${entry.title}</span>
+                    <button class="delete-btn" onclick="deleteEntry(${entry.id}, '${entry.dateStr}')">DELETE</button>
+                </div>
+                <div style="font-size: 8px; margin-bottom: 10px; opacity: 0.8;">
+                    📅 ${entry.date} &nbsp; ${entry.weather} &nbsp; ${entry.mood}
+                </div>
+                ${entry.type === 'photo' && entry.imageDataURL
+                    ? `<img src="${entry.imageDataURL}" style="max-width: 100%; height: auto; margin-top: 10px; border: 2px solid #fff; box-shadow: 2px 2px 0 0 #000; image-rendering: pixelated;"/>
+                       <p style="font-size: 8px; margin-top: 10px; line-height: 1.4; word-break: break-word;">${entry.content}</p>`
+                    : `<p style="font-size: 10px; line-height: 1.6; word-break: break-word;">${entry.content}</p>`
+                }
+            `;
+            return entryDiv;
+        }
+
+
+        // --- Settings / Data Transfer Functions ---
+
+        function openSettingsModal() { SETTINGS_MODAL.style.display = 'flex'; }
+        window.openSettingsModal = openSettingsModal;
+
+        function closeSettingsModal() { SETTINGS_MODAL.style.display = 'none'; }
+        window.closeSettingsModal = closeSettingsModal;
+
+        function exportLogs() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(allEntries, null, 2));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", `stardew_logbook_backup_${getFormattedDate(new Date(), 'YYYYMMDD')}.json`);
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+            window.alert("日誌已匯出！請檢查您的下載文件夾。");
+        }
+        window.exportLogs = exportLogs;
+
+        function importLogs(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            if (!window.confirm(`確定要匯入檔案 "${file.name}" 嗎？\n此操作將覆蓋您所有的現有日誌！`)) {
+                e.target.value = ''; // 清空檔案輸入
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const importedData = JSON.parse(event.target.result);
+                    if (Array.isArray(importedData)) {
+                        localStorage.setItem(STORAGE_KEY, JSON.stringify(importedData));
+                        loadAndRenderAll();
+                        window.alert("日誌匯入成功！應用程式已刷新。");
+                        closeSettingsModal();
+                        navigateTo('calendar');
+                    } else {
+                        throw new Error("匯入的檔案格式不正確，預期為日誌陣列。");
+                    }
+                } catch (error) {
+                    console.error("Data import failed:", error);
+                    window.alert(`匯入失敗: ${error.message}. 請確保檔案是有效的 JSON 格式。`);
+                }
+                e.target.value = ''; // 清空檔案輸入
+            };
+            reader.readAsText(file);
+        }
+        // importLogs is attached via event listener in DOMContentLoaded
+
+        function wipeData() {
+            if (window.confirm("🚨 警告：確定要清除所有日誌數據嗎？此操作不可逆！")) {
+                localStorage.removeItem(STORAGE_KEY);
+                allEntries = [];
+                loadAndRenderAll();
+                window.alert("所有數據已清除。應用程式已重置。");
+                closeSettingsModal();
+                navigateTo('calendar');
+            }
+        }
+        window.wipeData = wipeData;
+
+        // 將重要函數暴露給全局範圍，以便 HTML 內聯事件調用
+        window.toggleContentRequired = toggleContentRequired;
+        window.openForm = openForm;
+        window.closeForm = closeForm;
+        window.openSummaryModal = openSummaryModal;
+        window.closeSummaryModal = closeSummaryModal;
+        window.navigateTo = navigateTo;
+    </script>
+</body>
+</html>

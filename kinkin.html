@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stardew Logbook - 協作版日誌 (最終版)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* Stardew Palette */
+            --stardew-green: #4c7c34;
+            --stardew-brown: #a0785a;
+            --stardew-light-brown: #cfc29c;
+            --stardew-cream: #fcfbe7;
+            --stardew-dark: #2a2a2a;
+            --stardew-red: #c94c4c;
+            --stardew-gold: #ffc300;
+            --stardew-blue: #5b7999; /* LL 的顏色 */
+            --stardew-pink: #cc99a3; /* KK 的顏色 */
+            --pixel-size: 2px;
+            --page-width: 800px;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            image-rendering: pixelated;
+        }
+
+        body {
+            margin: 0; padding: 0;
+            background-color: var(--stardew-green);
+            background-image: repeating-linear-gradient(45deg, var(--stardew-green) 0, var(--stardew-green) 10px, var(--stardew-dark) 10px, var(--stardew-dark) 11px),
+                              repeating-linear-gradient(-45deg, var(--stardew-green) 0, var(--stardew-green) 10px, var(--stardew-dark) 10px, var(--stardew-dark) 11px);
+            background-size: 20px 20px;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Press Start 2P', cursive;
+            overflow: hidden;
+            color: var(--stardew-dark);
+        }
+
+        /* --- 書本容器 (Wrapper) --- */
+        .journal-window {
+            width: var(--page-width);
+            height: 90vh;
+            background-color: var(--stardew-cream);
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+
+            border: calc(var(--pixel-size) * 4) solid var(--stardew-brown);
+            box-shadow:
+                calc(var(--pixel-size) * 4) calc(var(--pixel-size) * 4) 0 0 var(--stardew-dark),
+                calc(var(--pixel-size) * 8) calc(var(--pixel-size) * 8) 0 0 var(--stardew-light-brown),
+                inset 0 0 0 2px var(--stardew-light-brown);
+        }
+
+        /* --- 視圖切換器 (用於動畫) --- */
+        #view-switcher {
+             position: relative;
+             height: calc(100% - 70px);
+             perspective: 1500px;
+        }
+
+        #view-switcher > div {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            padding: 20px;
+            background-color: var(--stardew-cream);
+            transition: transform 0.6s ease-in-out, opacity 0.6s ease-in-out;
+            transform-origin: left;
+            overflow-y: auto;
+            backface-visibility: hidden;
+        }
+
+        .view-hidden {
+            opacity: 0;
+            z-index: 10;
+            pointer-events: none;
+            transform: rotateY(-90deg);
+        }
+
+        .view-active {
+            opacity: 1;
+            z-index: 20;
+            pointer-events: all;
+            transform: rotateY(0deg);
+        }
+
+        /* --- 頂部狀態欄 --- */
+        .stat-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 10px 0;
+            border-bottom: var(--pixel-size) solid var(--stardew-dark);
+        }
+
+        /* 設定按鈕 */
+        .settings-btn {
+            background-color: var(--stardew-light-brown);
+            color: var(--stardew-dark);
+            padding: 4px 8px;
+            font-size: 10px;
+            cursor: pointer;
+            border: var(--pixel-size) solid var(--stardew-dark);
+            box-shadow: 2px 2px 0 0 var(--stardew-dark);
+            transition: all 0.1s;
+        }
+        .settings-btn:hover {
+             background-color: var(--stardew-gold);
+             transform: translate(-1px, -1px);
+        }
+
+        .love-value {
+            font-size: 10px;
+            background: var(--stardew-pink);
+            padding: 4px 8px;
+            color: #fff;
+            border: var(--pixel-size) solid var(--stardew-dark);
+            box-shadow: 2px 2px 0 0 var(--stardew-dark);
+        }
+        .stat-item { display: flex; align-items: center; font-size: 10px; }
+        .stat-icon { font-size: 18px; margin-right: 5px; }
+
+        /* --- 日曆相關樣式 (維持不變) --- */
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; font-size: 10px; }
+        .day-header { text-align: center; color: var(--stardew-brown); padding: 5px; }
+        .day-cell { height: 80px; padding: 5px; text-align: right; cursor: pointer; position: relative; background-color: #fff; border: var(--pixel-size) solid var(--stardew-light-brown); box-shadow: 1px 1px 0 0 var(--stardew-light-brown); transition: background-color 0.1s, transform 0.1s; }
+        .day-cell:not(.empty-cell):hover { background-color: var(--stardew-gold); transform: translate(-1px, -1px); }
+        .empty-cell { background-color: #f0f0f0; cursor: default; border: none; box-shadow: none; }
+        .has-entry { background-color: var(--stardew-pink); color: #fff; font-weight: bold; }
+        .day-cell .count { position: absolute; top: 5px; left: 5px; font-size: 8px; background: rgba(0,0,0,0.2); padding: 1px 3px; border-radius: 2px; }
+
+        /* --- 日曆導航按鈕樣式 --- */
+        .calendar-nav-btn { background: var(--stardew-brown); color: var(--stardew-cream); padding: 2px 5px; font-size: 8px; border: var(--pixel-size) solid var(--stardew-dark); box-shadow: 1px 1px 0 0 var(--stardew-dark); cursor: pointer; margin: 0 10px; display: inline-block; vertical-align: middle; }
+        .calendar-nav-btn:hover { background: var(--stardew-gold); color: var(--stardew-dark); }
+        #current-month-year { font-size: 14px; color: var(--stardew-brown); margin-top: 5px; display: flex; justify-content: center; align-items: center; }
+
+        /* --- 單日頁面 --- */
+        #day-view { padding-bottom: 50px; }
+        #day-title { font-size: 14px; text-align: center; margin-bottom: 20px; color: var(--stardew-dark); border-bottom: var(--pixel-size) solid var(--stardew-dark); padding-bottom: 10px; }
+        .back-btn { position: absolute; top: 25px; left: 25px; font-size: 10px; cursor: pointer; padding: 5px; background: var(--stardew-light-brown); border: var(--pixel-size) solid var(--stardew-dark); box-shadow: 2px 2px 0 0 var(--stardew-dark); z-index: 30; }
+        .timeline-content { display: flex; flex-direction: column; gap: 20px; padding-top: 20px; }
+
+        /* --- 核心：聊天氣泡樣式 (刪除按鈕等維持不變) --- */
+        .memory-entry { width: 70%; padding: 15px; margin-bottom: 10px; transition: all 0.3s; position: relative; border: var(--pixel-size) solid var(--stardew-dark); box-shadow: var(--pixel-size) var(--pixel-size) 0 0 var(--stardew-dark); }
+        .author-LL { margin-right: auto; background-color: var(--stardew-blue); color: #fff; }
+        .author-KK { margin-left: auto; background-color: var(--stardew-pink); color: var(--stardew-dark); }
+        .entry-header { font-size: 8px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 5px; border-bottom: var(--pixel-size) dashed rgba(255, 255, 255, 0.4); }
+
+        .delete-btn { background-color: rgba(255, 0, 0, 0.7); color: #fff; font-size: 8px; padding: 2px 5px; margin-left: 10px; border: var(--pixel-size) solid var(--stardew-dark); cursor: pointer; box-shadow: 1px 1px 0 0 var(--stardew-dark); transition: background-color 0.1s; line-height: 1; }
+        .author-KK .delete-btn { background-color: rgba(150, 0, 0, 0.7); }
+        .delete-btn:hover { background-color: darkred; box-shadow: 2px 2px 0 0 var(--stardew-dark); }
+
+        /* --- Modal & Form Styles --- */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.7); display: none; justify-content: center; align-items: center; z-index: 100; }
+        .crafting-menu { width: 500px; background-color: var(--stardew-cream); padding: 30px; border: calc(var(--pixel-size) * 4) solid var(--stardew-brown); box-shadow: calc(var(--pixel-size) * 4) calc(var(--pixel-size) * 4) 0 0 var(--stardew-dark), calc(var(--pixel-size) * 8) calc(var(--pixel-size) * 8) 0 0 var(--stardew-light-brown); }
+
+        .btn-pixel { background-color: var(--stardew-light-brown); color: var(--stardew-dark); padding: 8px 12px; font-size: 10px; cursor: pointer; border: var(--pixel-size) solid var(--stardew-dark); box-shadow: 2px 2px 0 0 var(--stardew-dark); transition: all 0.1s; }
+        .btn-pixel:hover { background-color: var(--stardew-gold); color: var(--stardew-dark); box-shadow: 3px 3px 0 0 var(--stardew-dark); transform: translate(-1px, -1px); }
+        .btn-pixel:active { transform: translate(1px, 1px); box-shadow: 1px 1px 0 0 var(--stardew-dark); }
+        .add-btn { position: fixed; bottom: 30px; right: 30px; width: 120px; height: 40px; line-height: 20px; text-align: center; background-color: var(--stardew-gold); color: var(--stardew-dark); cursor: pointer; z-index: 50; }
+
+        /* 設定 Modal 專用樣式 */
+        .setting-option {
+            padding: 15px;
+            border: var(--pixel-size) solid var(--stardew-dark);
+            background-color: #fff;
+            margin-bottom: 10px;
+        }
+        .setting-option p {
+            font-size: 8px;
+            color: var(--stardew-dark);
+            line-height: 1.4;
+            margin-bottom: 10px;
+        }
+        .setting-option h3 {
+            font-size: 12px;
+            margin-top: 0;
+            color: var(--stardew-brown);
+        }
+        .setting-option input[type="file"] {
+            display: none;
+        }
+        .file-upload-btn {
+            background-color: var(--stardew-blue);
+            color: #fff;
+            padding: 8px 12px;
+            font-size: 10px;
+            cursor: pointer;
+            border: var(--pixel-size) solid var(--stardew-dark);
+            box-shadow: 2px 2px 0 0 var(--stardew-dark);
+            display: inline-block;
+            margin-top: 5px;
+        }
+        .file-upload-btn:hover {
+            background-color: #4a6785;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="journal-window">
+
+        <div class="stat-bar">
+             <button class="settings-btn" onclick="openSettingsModal()">⚙️ SETTINGS</button> <div class="love-value" id="love-value">
+                ❤️ LOVE: 0
+            </div>
+            <div class="stat-item">
+                <span class="stat-icon">📅</span>
+                <span style="font-size: 8px;" id="current-date"></span>
+            </div>
+        </div>
+
+        <div id="view-switcher">
+
+            <div id="calendar-view" class="view-active">
+                <header style="text-align: center; margin-bottom: 30px;">
+                    <h1 style="font-size: 20px; margin: 0; color: var(--stardew-dark);">CALENDAR</h1>
+                    <div id="current-month-year"></div>
+                </header>
+                <div class="calendar-grid" id="calendar-grid">
+                    </div>
+            </div>
+
+            <div id="day-view" class="view-hidden">
+                <button class="back-btn" onclick="navigateTo('calendar')">← BACK</button>
+                <h2 id="day-title"></h2>
+                <div class="timeline-content" id="day-timeline-content">
+                    </div>
+            </div>
+
+        </div>
+
+    </div>
+
+    <button class="add-btn btn-pixel" onclick="openForm()">+ New Log</button>
+
+    <div class="modal-overlay" id="crafting-modal">
+        <div class="crafting-menu">
+            <h2>CRAFT NEW ENTRY</h2>
+            <form id="entry-form">
+
+                <div class="form-row">
+                    <div class="form-group"><label for="entry-author">RECORDER (記事人)</label><select id="entry-author" required><option value="LL">LL</option><option value="KK">KK</option></select></div>
+                    <div class="form-group"><label for="entry-date">DATE (日期)</label><input type="date" id="entry-date" required></div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group"><label for="entry-weather">WEATHER (天氣)</label><select id="entry-weather" required><option value="☀️">Sunny Day ☀️</option><option value="🌧️">Rainy Day 🌧️</option><option value="💨">Windy Day 💨</option><option value="❄️">Snowy Day ❄️</option></select></div>
+                    <div class="form-group"><label for="entry-type">ENTRY TYPE (類型)</label><select id="entry-type" required><option value="text">Mood/Text Log (文字)</option><option value="photo">Photo Memory (圖片)</option></select></div>
+                </div>
+
+                <div class="form-group"><label for="entry-title">TITLE / SHORT CAPTION (標題)</label><input type="text" id="entry-title" required maxlength="50"></div>
+                <div class="form-group"><label for="entry-content">MAIN CONTENT (主要內容)</label><textarea id="entry-content" required></textarea></div>
+
+                <div class="form-group" id="file-upload-group">
+                    <label for="entry-image">ATTACH PHOTO (可選圖片)</label>
+                    <label for="entry-image" class="custom-file-upload" id="file-label">CLICK TO SELECT FILE 📷</label>
+                    <input type="file" id="entry-image" accept="image/*">
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn-pixel" onclick="closeForm()">CLOSE</button>
+                    <button type="submit" class="btn-pixel" style="background-color: var(--stardew-green); color:#fff;">LOG IT!</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="settings-modal">
+        <div class="crafting-menu" style="width: 450px;">
+            <h2>SETTINGS / DATA TRANSFER</h2>
+
+            <div class="setting-option">
+                <h3>EXPORT LOGS (匯出日誌)</h3>
+                <p>將所有日誌內容打包成一個 `.json` 檔案。這是您與協作者共享進度的方式。</p>
+                <button class="btn-pixel" style="background-color: var(--stardew-gold); color: var(--stardew-dark);" onclick="exportLogs()">DOWNLOAD .JSON</button>
+            </div>
+
+            <div class="setting-option">
+                <h3>IMPORT LOGS (匯入日誌)</h3>
+                <p>上傳一個 `.json` 檔案來覆蓋本地儲存的日誌。**警告：這將取代您所有的本地紀錄！**</p>
+                <input type="file" id="import-file-input" accept=".json">
+                <label for="import-file-input" class="file-upload-btn">
+                    UPLOAD & IMPORT FILE
+                </label>
+            </div>
+
+            <div class="setting-option">
+                <h3>WIPE ALL DATA (清除數據)</h3>
+                <p>如果您想從頭開始或清理本地儲存，請點擊此處。**此操作不可逆！**</p>
+                <button class="btn-pixel" style="background-color: var(--stardew-red); color: #fff;" onclick="wipeData()">WIPE LOCAL DATA</button>
+            </div>
+
+            <div class="form-actions">
+                <button type="button" class="btn-pixel" onclick="closeSettingsModal()">CLOSE</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        // --- Setup & Global Variables ---
+        const MODAL = document.getElementById('crafting-modal');
+        const SETTINGS_MODAL = document.getElementById('settings-modal');
+        const FORM = document.getElementById('entry-form');
+        const CALENDAR_GRID = document.getElementById('calendar-grid');
+        const DAY_TIMELINE = document.getElementById('day-timeline-content');
+        const CALENDAR_VIEW = document.getElementById('calendar-view');
+        const DAY_VIEW = document.getElementById('day-view');
+
+        const FILE_INPUT = document.getElementById('entry-image');
+        const FILE_LABEL = document.getElementById('file-label');
+        const IMPORT_FILE_INPUT = document.getElementById('import-file-input');
+
+        const STORAGE_KEY = 'stardewFarmLogEntriesV2';
+        let allEntries = [];
+        const LOVE_VALUE_PER_ENTRY = 5;
+
+        let currentDisplayYear;
+        let currentDisplayMonth;
+
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const today = new Date();
+            currentDisplayYear = today.getFullYear();
+            currentDisplayMonth = today.getMonth();
+
+            document.getElementById('current-date').textContent = getFormattedDate(today, 'YYYY/MM/DD');
+            loadAndRenderAll();
+            navigateTo('calendar');
+
+            // 綁定匯入事件
+            IMPORT_FILE_INPUT.addEventListener('change', importLogs);
+        });
+
+        function loadAndRenderAll() {
+            allEntries = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+            calculateLoveValue();
+            renderCalendar();
+        }
+
+        function calculateLoveValue() {
+            const totalLove = allEntries.length * LOVE_VALUE_PER_ENTRY;
+            document.getElementById('love-value').textContent = `❤️ LOVE: ${totalLove}`;
+        }
+
+        // --- 視圖切換與導航 (維持不變) ---
+        function navigateTo(view, dateStr = null) {
+            if (view === 'day' && dateStr) {
+                renderDayView(dateStr);
+                CALENDAR_VIEW.classList.remove('view-active');
+                CALENDAR_VIEW.classList.add('view-hidden');
+                DAY_VIEW.classList.remove('view-hidden');
+                DAY_VIEW.classList.add('view-active');
+
+            } else if (view === 'calendar') {
+                const today = new Date();
+                document.getElementById('current-date').textContent = getFormattedDate(today, 'YYYY/MM/DD');
+
+                currentDisplayYear = today.getFullYear();
+                currentDisplayMonth = today.getMonth();
+                renderCalendar();
+
+                DAY_VIEW.classList.remove('view-active');
+                DAY_VIEW.classList.add('view-hidden');
+                CALENDAR_VIEW.classList.remove('view-hidden');
+                CALENDAR_VIEW.classList.add('view-active');
+            }
+        }
+
+        function prevMonth() { currentDisplayMonth--; if (currentDisplayMonth < 0) { currentDisplayMonth = 11; currentDisplayYear--; } renderCalendar(); }
+        function nextMonth() { currentDisplayMonth++; if (currentDisplayMonth > 11) { currentDisplayMonth = 0; currentDisplayYear++; } renderCalendar(); }
+        window.prevMonth = prevMonth;
+        window.nextMonth = nextMonth;
+
+        function renderCalendar() {
+            const year = currentDisplayYear;
+            const month = currentDisplayMonth;
+
+            const entriesByDate = allEntries.reduce((acc, entry) => {
+                const dateKey = entry.dateStr;
+                if (!acc[dateKey]) acc[dateKey] = 0;
+                acc[dateKey]++;
+                return acc;
+            }, {});
+
+            document.getElementById('current-month-year').innerHTML = `
+                <button class="calendar-nav-btn" onclick="prevMonth()">←</button>
+                ${year} / ${month + 1}
+                <button class="calendar-nav-btn" onclick="nextMonth()">→</button>
+            `;
+
+            CALENDAR_GRID.innerHTML = '';
+
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const firstDayOfWeek = new Date(year, month, 1).getDay();
+            const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+            dayNames.forEach(day => { const header = document.createElement('div'); header.className = 'day-header'; header.textContent = day; CALENDAR_GRID.appendChild(header); });
+            for (let i = 0; i < firstDayOfWeek; i++) { const empty = document.createElement('div'); empty.className = 'empty-cell'; CALENDAR_GRID.appendChild(empty); }
+
+            for (let day = 1; day <= daysInMonth; day++) {
+                const date = new Date(year, month, day);
+                const dateKey = getFormattedDate(date, 'YYYY-MM-DD');
+                const cell = document.createElement('div');
+                cell.className = 'day-cell';
+                cell.textContent = day;
+                cell.dataset.date = dateKey;
+
+                if (entriesByDate[dateKey]) {
+                    cell.classList.add('has-entry');
+                    const countSpan = document.createElement('span');
+                    countSpan.className = 'count';
+                    countSpan.textContent = `${entriesByDate[dateKey]} Log${entriesByDate[dateKey] > 1 ? 's' : ''}`;
+                    cell.appendChild(countSpan);
+                }
+
+                cell.onclick = (function(key) { return function() { navigateTo('day', key); }; })(dateKey);
+                CALENDAR_GRID.appendChild(cell);
+            }
+        }
+
+        function renderDayView(dateStr) {
+            document.getElementById('day-title').textContent = `LOGS FOR ${dateStr}`;
+            DAY_TIMELINE.innerHTML = '';
+            const dateObj = new Date(dateStr + 'T00:00:00');
+            document.getElementById('current-date').textContent = getFormattedDate(dateObj, 'YYYY/MM/DD');
+
+            const dayEntries = allEntries.filter(e => e.dateStr === dateStr)
+                                       .sort((a, b) => b.id - a.id);
+
+            if (dayEntries.length === 0) {
+                DAY_TIMELINE.innerHTML = '<p style="text-align:center; font-size:10px; padding-top: 50px;">NO ENTRIES FOR THIS DATE. BE THE FIRST TO LOG!</p>';
+                return;
+            }
+
+            dayEntries.forEach(entry => {
+                DAY_TIMELINE.appendChild(createEntryElement(entry));
+            });
+        }
+
+        // --- 刪除功能 ---
+        function deleteEntry(id, dateStr) {
+            if (!confirm("確定要刪除這條日誌嗎？此操作無法撤銷。")) { return; }
+            allEntries = allEntries.filter(entry => entry.id !== id);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(allEntries));
+            calculateLoveValue();
+            renderDayView(dateStr);
+            renderCalendar();
+        }
+        window.deleteEntry = deleteEntry;
+
+
+        // --- 表單邏輯 (維持不變) ---
+        function openForm() { MODAL.style.display = 'flex'; FORM.reset(); FILE_LABEL.textContent = 'CLICK TO SELECT FILE 📷'; document.getElementById('entry-date').value = new Date().toISOString().split('T')[0]; }
+        function closeForm() { MODAL.style.display = 'none'; }
+        FILE_INPUT.addEventListener('change', (e) => { FILE_LABEL.textContent = e.target.files.length > 0 ? `File Selected: ${e.target.files[0].name}` : 'CLICK TO SELECT FILE 📷'; });
+
+        FORM.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const dateInput = document.getElementById('entry-date').value;
+            const file = FILE_INPUT.files[0];
+            let imageDataURL = null;
+            if (file) { imageDataURL = await fileToBase64(file); }
+
+            const newEntry = {
+                id: Date.now(), author: document.getElementById('entry-author').value, dateStr: dateInput, date: getFormattedDate(new Date(dateInput), 'YYYY/MM/DD'), weather: document.getElementById('entry-weather').value, title: document.getElementById('entry-title').value, content: document.getElementById('entry-content').value, type: document.getElementById('entry-type').value, imageDataURL: imageDataURL,
+            };
+            saveEntry(newEntry);
+            loadAndRenderAll();
+            navigateTo('day', newEntry.dateStr);
+            closeForm();
+        });
+
+        function saveEntry(newEntry) {
+            allEntries.push(newEntry);
+            allEntries.sort((a, b) => a.id - b.id);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(allEntries));
+        }
+
+
+        // --- 核心：匯出/匯入/清除 功能 ---
+
+        function openSettingsModal() { SETTINGS_MODAL.style.display = 'flex'; }
+        function closeSettingsModal() { SETTINGS_MODAL.style.display = 'none'; }
+        window.openSettingsModal = openSettingsModal;
+
+        // 匯出日誌為 JSON 檔案
+        function exportLogs() {
+            const data = JSON.stringify(allEntries, null, 2);
+            const blob = new Blob([data], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            const date = getFormattedDate(new Date(), 'YYYY-MM-DD');
+            a.download = `stardew_log_export_${date}.json`;
+            a.href = url;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            alert("日誌已成功匯出為 JSON 檔案！請將此檔案發送給您的協作者。");
+        }
+        window.exportLogs = exportLogs;
+
+        // 匯入日誌 (從 JSON 檔案)
+        function importLogs(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (!confirm("確定要匯入新的日誌嗎？現有的本地紀錄將會被新的檔案數據覆蓋。")) {
+                event.target.value = null; // 重置 input 讓用戶可以重新選擇同一個檔案
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+
+                    // 簡易驗證
+                    if (Array.isArray(importedData) && (importedData.length === 0 || (importedData[0].id && importedData[0].dateStr))) {
+
+                        // 覆蓋本地數據
+                        localStorage.setItem(STORAGE_KEY, JSON.stringify(importedData));
+
+                        // 重新載入並渲染
+                        loadAndRenderAll();
+
+                        closeSettingsModal();
+                        alert(`日誌成功匯入！共載入 ${importedData.length} 條紀錄。`);
+                    } else {
+                        alert("錯誤：匯入的檔案格式不正確，請確認您匯入的是正確的日誌 JSON 檔案。");
+                    }
+                } catch (error) {
+                    console.error("Error parsing JSON:", error);
+                    alert("錯誤：讀取檔案失敗或 JSON 格式無效。");
+                } finally {
+                    event.target.value = null; // 重置 input
+                }
+            };
+            reader.onerror = function(e) {
+                alert("錯誤：讀取檔案時發生錯誤。");
+                event.target.value = null;
+            };
+
+            reader.readAsText(file);
+        }
+
+        // 清除所有本地數據
+        function wipeData() {
+            if (!confirm("警告：您確定要清除所有的本地日誌數據嗎？此操作將永久刪除所有紀錄，無法復原！請確認您已匯出備份。")) {
+                return;
+            }
+            localStorage.removeItem(STORAGE_KEY);
+            allEntries = [];
+            loadAndRenderAll();
+            navigateTo('calendar');
+            closeSettingsModal();
+            alert("本地日誌數據已完全清除。您可以開始新的紀錄或匯入備份。");
+        }
+        window.wipeData = wipeData;
+
+        // --- Rendering Templates & Utilities (維持不變) ---
+        function createEntryElement(entry) {
+            // ... (HTML 模板創建邏輯維持不變)
+            const entryEl = document.createElement('div');
+            entryEl.className = `memory-entry author-${entry.author} type-${entry.type}`;
+
+            let bodyContent;
+            let entryTypeLabel = entry.author + '\'s Log';
+            let titleColor = entry.author === 'LL' ? '#fff' : 'var(--stardew-dark)';
+
+            if (entry.type === 'photo' && entry.imageDataURL) {
+                bodyContent = `
+                    <div class="entry-body">
+                        <div class="photo-slot">
+                            <img src="${entry.imageDataURL}" alt="${entry.title}">
+                        </div>
+                        <div class="photo-caption" style="color:${titleColor}; font-size: 8px;">
+                            **[${entry.title}]**<br>
+                            ${entry.content}
+                        </div>
+                    </div>
+                `;
+            } else {
+                bodyContent = `
+                    <div class="entry-body">
+                        <span style="display:block; font-size: 10px; margin-bottom: 5px; color:${titleColor};">**${entry.title}**</span>
+                        ${entry.content}
+                        ${entry.imageDataURL ? `<img src="${entry.imageDataURL}" style="max-width: 100%; margin-top: 10px; opacity: 0.8; border: 2px solid var(--stardew-dark); box-shadow: 2px 2px 0 0 var(--stardew-dark);">` : ''}
+                    </div>
+                `;
+            }
+
+            entryEl.innerHTML = `
+                <div class="entry-header">
+                    <span>${entryTypeLabel}</span>
+                    <span style="display:flex; align-items:center;">
+                        <span>${entry.date} • ${getWeatherName(entry.weather)} ${entry.weather}</span>
+                        <button class="delete-btn" onclick="deleteEntry(${entry.id}, '${entry.dateStr}')">X DELETE</button>
+                    </span>
+                </div>
+                ${bodyContent}
+            `;
+            return entryEl;
+        }
+
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+                reader.readAsDataURL(file);
+            });
+        }
+
+        function getFormattedDate(dateObj, format) {
+            const year = dateObj.getFullYear();
+            const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const day = String(dateObj.getDate()).padStart(2, '0');
+
+            if (format === 'YYYY-MM-DD') return `${year}-${month}-${day}`;
+            return `${year}/${month}/${day}`;
+        }
+
+        function getWeatherName(emoji) {
+            switch(emoji) {
+                case '☀️': return 'Sunny Day';
+                case '🌧️': return 'Rainy Day';
+                case '💨': return 'Windy Day';
+                case '❄️': return 'Snowy Day';
+                default: return 'Clear Day';
+            }
+        }
+    </script>
+</body>
+</html>
